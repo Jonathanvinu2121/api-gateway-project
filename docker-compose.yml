@@ -1,6 +1,18 @@
-version: '3.8'
-
 services:
+  mongodb:
+    image: mongo:7
+    container_name: api_mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  redis:
+    image: redis:7-alpine
+    container_name: api_redis
+    ports:
+      - "6379:6379"
+
   gateway:
     build: ./gateway
     container_name: api_gateway
@@ -10,7 +22,12 @@ services:
       - PORT=4000
       - USERS_SERVICE_URL=http://users-service:5001
       - ORDERS_SERVICE_URL=http://orders-service:5002
+      - MONGODB_URI=mongodb://mongodb:27017/api_gateway
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=super-secret-jwt-key
     depends_on:
+      - mongodb
+      - redis
       - users-service
       - orders-service
 
@@ -35,3 +52,6 @@ services:
       - LATENCY_MIN=50
       - LATENCY_MAX=2000
       - FAILURE_RATE=0.0
+
+volumes:
+  mongo_data:
