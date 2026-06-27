@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const authRoutes = require('./routes/auth.routes');
 const proxyRoutes = require('./routes/proxy.routes');
 const authMiddleware = require('./middleware/auth');
+const { initRateLimiter } = require('./middleware/rateLimiter');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -50,6 +51,12 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Not Found', message: 'Requested path does not exist on gateway' });
 });
 
-app.listen(PORT, () => {
-  console.log(`API Gateway listening on port ${PORT}`);
+// Initialize rate limiter Lua scripts, then start Express server
+initRateLimiter().then(() => {
+  app.listen(PORT, () => {
+    console.log(`API Gateway listening on port ${PORT}`);
+  });
+}).catch((err) => {
+  console.error('Failed to initialize rate limiter Lua scripts:', err.message);
+  process.exit(1);
 });
