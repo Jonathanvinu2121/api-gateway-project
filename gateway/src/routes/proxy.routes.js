@@ -1,6 +1,7 @@
 const express = require('express');
 const proxy = require('express-http-proxy');
 const { rateLimiterMiddleware } = require('../middleware/rateLimiter');
+const { circuitBreakerMiddleware } = require('../middleware/circuitBreaker');
 const router = express.Router();
 
 // Hardcoded route table mapping service prefix to target upstream URL with rate limit config
@@ -46,28 +47,39 @@ router.use('/:service', (req, res, next) => {
   // Create rate limiter checker dynamically for this route configuration
   const limitChecker = rateLimiterMiddleware(routeConfig);
 
-  // Run rate limiting first, then proxy if allowed
+  // Run rate limiting first
   return limitChecker(req, res, (err) => {
     if (err) return next(err);
 
-    // Proxy the request to the upstream service
-    return proxy(routeConfig.upstreamUrl, {
-      proxyReqPathResolver: (req) => {
-        // req.url is the path after the matched service prefix (e.g., /data or /health)
-        return req.url;
-      },
-      userResHeaderDecorator: (headers) => {
-        return headers;
-      },
-      proxyErrorHandler: (err, res, next) => {
-        console.error(`Proxy error connecting to service '${service}' at ${routeConfig.upstreamUrl}:`, err.message);
-        res.status(502).json({
-          error: 'Bad Gateway',
-          message: `Could not connect to service '${service}'`,
-          details: err.message
-        });
-      }
-    })(req, res, next);
+    // Run circuit breaker second
+    return circuitBreakerMiddleware(req, res, (err) => {
+      if (err) return next(err);
+
+      // Proxy the request to the upstream service if both checks pass
+      return proxy(routeConfig.upstreamUrl, {
+        proxyReqPathResolver: (req) => {
+          // req.url is the path after the matched service prefix (e.g., /data or /health)
+          return req.url;
+        },
+        userResHeaderDecorator: (headers) => {
+          return headers;
+        },
+        proxyErrorHandler: (err, res, next) => {
+          console.error(`Proxy error connecting to service '${service}' at ${routeConfig.upstreamUrl}:`, err.message);
+          
+          // Explicitly record a failure on the service's circuit breaker
+          if (req.recordBreakerFailure) {
+            req.recordBreakerFailure();
+          }
+
+          res.status(502).json({
+            error: 'Bad Gateway',
+            message: `Could not connect to service '${service}'`,
+            details: err.message
+          });
+        }
+      })(req, res, next);
+    });
   });
 });
 
