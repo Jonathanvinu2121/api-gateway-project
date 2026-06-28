@@ -3,6 +3,8 @@ const app = express();
 
 const PORT = process.env.PORT || 5002;
 
+let failureRateOverride = null;
+
 // Helper to get random latency
 const getLatencyDelay = () => {
   const min = parseInt(process.env.LATENCY_MIN || '50', 10);
@@ -12,13 +14,32 @@ const getLatencyDelay = () => {
 
 // Helper to check if request should fail
 const shouldFail = () => {
-  const failureRate = parseFloat(process.env.FAILURE_RATE || '0');
+  const failureRate = failureRateOverride !== null ? failureRateOverride : parseFloat(process.env.FAILURE_RATE || '0');
   return Math.random() < failureRate;
 };
 
 // Healthcheck endpoint (no latency/failure)
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', service: 'orders-service' });
+});
+
+// Configure endpoint to update failure rate at runtime with key validation
+app.post('/configure', express.json(), (req, res) => {
+  const apiKey = req.headers['x-admin-key'];
+  const expectedKey = process.env.ADMIN_API_KEY || 'admin_demo_secret_key';
+
+  if (!apiKey || apiKey !== expectedKey) {
+    return res.status(401).json({ error: 'Unauthorized', message: 'Invalid or missing admin key' });
+  }
+
+  const { failureRate } = req.body;
+  if (typeof failureRate !== 'number' || failureRate < 0 || failureRate > 1) {
+    return res.status(400).json({ error: 'Bad Request', message: 'failureRate must be a number between 0 and 1' });
+  }
+
+  failureRateOverride = failureRate;
+  console.log(`[orders-service] Failure rate override updated to: ${failureRate}`);
+  return res.status(200).json({ success: true, failureRate: failureRateOverride });
 });
 
 // Data endpoint (with random latency and failure injection)

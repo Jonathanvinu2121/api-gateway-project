@@ -25,6 +25,7 @@ services:
       - MONGODB_URI=mongodb://mongodb:27017/api_gateway
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=super-secret-jwt-key
+      - ADMIN_API_KEY=admin_demo_secret_key
     depends_on:
       - mongodb
       - redis
@@ -41,6 +42,7 @@ services:
       - LATENCY_MIN=50
       - LATENCY_MAX=2000
       - FAILURE_RATE=0.0
+      - ADMIN_API_KEY=admin_demo_secret_key
 
   orders-service:
     build: ./services/orders-service
@@ -52,6 +54,7 @@ services:
       - LATENCY_MIN=50
       - LATENCY_MAX=2000
       - FAILURE_RATE=0.0
+      - ADMIN_API_KEY=admin_demo_secret_key
 
 volumes:
   mongo_data:

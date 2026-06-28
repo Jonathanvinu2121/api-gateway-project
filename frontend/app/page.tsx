@@ -1,9 +1,15 @@
-import { ThroughputChart } from "@/components/throughput-chart"
-import { StatusCards } from "@/components/status-cards"
-import { ClientList } from "@/components/client-list"
-import { LogPanel } from "@/components/log-panel"
+"use client"
+
+import { useState } from "react"
+import { ThroughputChart } from "../components/throughput-chart"
+import { StatusCards } from "../components/status-cards"
+import { ClientList } from "../components/client-list"
+import { LogPanel } from "../components/log-panel"
+import { Playground } from "../components/playground"
 
 export default function Page() {
+  const [activeTab, setActiveTab] = useState<"dashboard" | "playground">("dashboard")
+
   return (
     <main className="mx-auto min-h-screen max-w-6xl px-6 py-10">
       <header className="mb-10 flex items-center justify-between">
@@ -17,27 +23,58 @@ export default function Page() {
             us-east-1 · production
           </span>
         </div>
+
+        {/* Tab Selection Switcher */}
+        <div className="flex bg-muted/60 p-0.5 rounded border border-border">
+          <button
+            onClick={() => setActiveTab("dashboard")}
+            className={`px-3 py-1 text-xs rounded transition-all cursor-pointer ${
+              activeTab === "dashboard"
+                ? "bg-card text-foreground font-semibold border border-border"
+                : "bg-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Dashboard
+          </button>
+          <button
+            onClick={() => setActiveTab("playground")}
+            className={`px-3 py-1 text-xs rounded transition-all cursor-pointer ${
+              activeTab === "playground"
+                ? "bg-card text-foreground font-semibold border border-border"
+                : "bg-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Playground
+          </button>
+        </div>
+
         <span className="font-mono text-xs text-muted-foreground">
           uptime 99.98%
         </span>
       </header>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <ThroughputChart />
-        </div>
-        <div className="lg:col-span-1">
-          <StatusCards />
-        </div>
-      </div>
+      {activeTab === "dashboard" ? (
+        <>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <ThroughputChart />
+            </div>
+            <div className="lg:col-span-1">
+              <StatusCards />
+            </div>
+          </div>
 
-      <div className="mt-6">
-        <ClientList />
-      </div>
+          <div className="mt-6">
+            <ClientList />
+          </div>
 
-      <div className="mt-6">
-        <LogPanel />
-      </div>
+          <div className="mt-6">
+            <LogPanel />
+          </div>
+        </>
+      ) : (
+        <Playground />
+      )}
     </main>
   )
 }
