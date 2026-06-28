@@ -1,0 +1,68 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: var(--font-inter), 'Inter Fallback', sans-serif;
+  --font-mono: var(--font-jetbrains-mono), 'JetBrains Mono Fallback', monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+
+  --color-success: var(--success);
+  --color-alert: var(--alert);
+  --color-warning: var(--warning);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+}
+
+:root,
+.dark {
+  color-scheme: dark;
+
+  /* Background: #0B0E14 */
+  --background: oklch(0.165 0.012 260);
+  /* Primary text: #E8EAED */
+  --foreground: oklch(0.925 0.004 260);
+
+  /* Card/panel surface: #161A23 */
+  --card: oklch(0.215 0.012 260);
+  --card-foreground: oklch(0.925 0.004 260);
+
+  --muted: oklch(0.215 0.012 260);
+  /* Secondary/muted text: #8B92A3 */
+  --muted-foreground: oklch(0.64 0.018 260);
+
+  /* Subtle 1px border */
+  --border: oklch(1 0 0 / 8%);
+  --ring: oklch(0.64 0.018 260);
+
+  /* Functional status accents */
+  --success: oklch(0.78 0.13 184); /* #2DD4BF teal */
+  --alert: oklch(0.7 0.17 21); /* #F87171 red */
+  --warning: oklch(0.83 0.15 80); /* #FBBF24 amber */
+
+  --radius: 0.5rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
