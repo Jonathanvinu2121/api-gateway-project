@@ -7,4 +7,7 @@ build/
 coverage/
 redis/
 test-rate-limiter.js
+.next/
+frontend/.next/
+
 
