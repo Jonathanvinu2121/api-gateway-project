@@ -28,6 +28,7 @@ const initRateLimiter = async () => {
 
 const rateLimiterMiddleware = (routeConfig) => {
   return async (req, res, next) => {
+    req.rateLimitDecision = 'allowed';
     // Exclude healthcheck routes from rate limiting
     if (req.path === '/health' || req.path === '/health/') {
       return next();
@@ -70,6 +71,7 @@ const rateLimiterMiddleware = (routeConfig) => {
         if (allowed === 1) {
           return next();
         } else {
+          req.rateLimitDecision = 'blocked';
           const retryAfter = Math.max(1, Math.ceil(resetTime - now));
           res.setHeader('Retry-After', retryAfter);
           return res.status(429).json({
@@ -99,6 +101,7 @@ const rateLimiterMiddleware = (routeConfig) => {
         if (allowed === 1) {
           return next();
         } else {
+          req.rateLimitDecision = 'blocked';
           const retryAfter = Math.max(1, Math.ceil(resetTime - now));
           res.setHeader('Retry-After', retryAfter);
           return res.status(429).json({

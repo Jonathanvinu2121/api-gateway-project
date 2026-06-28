@@ -1,7 +1,9 @@
 const express = require('express');
 const proxy = require('express-http-proxy');
 const { rateLimiterMiddleware } = require('../middleware/rateLimiter');
-const { circuitBreakerMiddleware } = require('../middleware/circuitBreaker');
+const { circuitBreakerMiddleware, getBreaker } = require('../middleware/circuitBreaker');
+const RequestLog = require('../models/RequestLog');
+const ioHelper = require('../lib/io');
 const router = express.Router();
 
 // Hardcoded route table mapping service prefix to target upstream URL with rate limit config
@@ -31,6 +33,65 @@ const routeTable = {
 };
 
 console.log('Route Table Loaded with Rate Limits:', JSON.stringify(routeTable, null, 2));
+
+// Global request logging interceptor
+router.use((req, res, next) => {
+  const start = Date.now();
+
+  // Initialize state-stamped variables for logging accuracy
+  req.rateLimitDecision = 'allowed';
+
+  // Parse the service path prefix to resolve the corresponding breaker state
+  const pathParts = req.path.split('/'); // e.g., req.path = "/users/data" -> ['', 'users', 'data']
+  const service = pathParts[1];
+  if (service && routeTable[service]) {
+    const breaker = getBreaker(service);
+    req.breakerState = breaker ? breaker.state : 'CLOSED';
+  } else {
+    req.breakerState = 'CLOSED';
+  }
+
+  // Hook into response completion
+  res.on('finish', async () => {
+    // Only log if request resolved to one of our mapped service routes
+    if (!service || !routeTable[service]) return;
+
+    const latencyMs = Date.now() - start;
+    const tenantId = req.user ? req.user.tenantId : 'anonymous';
+    const route = req.originalUrl;
+    const statusCode = res.statusCode;
+    const rateLimitDecision = req.rateLimitDecision;
+    const breakerState = req.breakerState;
+
+    try {
+      const log = new RequestLog({
+        tenantId,
+        route,
+        statusCode,
+        latencyMs,
+        rateLimitDecision,
+        breakerState,
+        timestamp: new Date()
+      });
+      await log.save();
+
+      // Emit Live WebSocket Event immediately
+      ioHelper.emitEvent('request:logged', {
+        tenantId,
+        route,
+        statusCode,
+        latencyMs,
+        rateLimitDecision,
+        breakerState,
+        timestamp: log.timestamp
+      });
+    } catch (err) {
+      console.error('[Logging Interceptor] Error logging request to Mongo:', err.message);
+    }
+  });
+
+  next();
+});
 
 // Catch-all route to proxy requests dynamically based on the service prefix
 router.use('/:service', (req, res, next) => {

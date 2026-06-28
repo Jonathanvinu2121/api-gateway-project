@@ -1,14 +1,44 @@
 require('dotenv').config();
 const express = require('express');
+const http = require('http');
 const mongoose = require('mongoose');
 const authRoutes = require('./routes/auth.routes');
 const proxyRoutes = require('./routes/proxy.routes');
+const adminRoutes = require('./routes/admin.routes');
 const authMiddleware = require('./middleware/auth');
 const { initRateLimiter } = require('./middleware/rateLimiter');
+const { getBreaker } = require('./middleware/circuitBreaker');
+const ioHelper = require('./lib/io');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/api_gateway';
+
+// Create HTTP server wrapping the Express app
+const server = http.createServer(app);
+
+// Initialize Socket.io using the HTTP server
+ioHelper.init(server);
+
+// Wire circuit breaker transition event forwarding over Socket.io
+const usersBreaker = getBreaker('users');
+const ordersBreaker = getBreaker('orders');
+
+usersBreaker.on('transition', (data) => {
+  ioHelper.emitEvent('breaker:transition', {
+    service: data.service,
+    from: data.from,
+    to: data.to
+  });
+});
+
+ordersBreaker.on('transition', (data) => {
+  ioHelper.emitEvent('breaker:transition', {
+    service: data.service,
+    from: data.from,
+    to: data.to
+  });
+});
 
 // Connect to MongoDB
 mongoose.connect(MONGODB_URI)
@@ -35,6 +65,9 @@ app.use((req, res, next) => {
 // Mount auth routes (unprotected)
 app.use('/auth', authRoutes);
 
+// Mount admin routes (unprotected - JWT exclusion is handled inside auth.js since /admin/* is excluded)
+app.use('/admin', adminRoutes);
+
 // Gateway health check (unprotected)
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', service: 'api-gateway' });
@@ -51,9 +84,9 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Not Found', message: 'Requested path does not exist on gateway' });
 });
 
-// Initialize rate limiter Lua scripts, then start Express server
+// Initialize rate limiter Lua scripts, then start server
 initRateLimiter().then(() => {
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log(`API Gateway listening on port ${PORT}`);
   });
 }).catch((err) => {

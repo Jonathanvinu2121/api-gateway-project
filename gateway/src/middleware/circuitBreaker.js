@@ -135,12 +135,14 @@ const circuitBreakerMiddleware = (req, res, next) => {
   const breaker = getBreaker(serviceId);
   req.breaker = breaker;
   req.breakerRecorded = false;
+  req.breakerState = breaker.state; // Set initial state
 
   // Helpers to prevent double recording per request
   req.recordBreakerFailure = () => {
     if (!req.breakerRecorded) {
       req.breakerRecorded = true;
       breaker.recordFailure();
+      req.breakerState = breaker.state; // Update in case of transition
     }
   };
 
@@ -148,6 +150,7 @@ const circuitBreakerMiddleware = (req, res, next) => {
     if (!req.breakerRecorded) {
       req.breakerRecorded = true;
       breaker.recordSuccess();
+      req.breakerState = breaker.state; // Update in case of transition
     }
   };
 
@@ -161,7 +164,10 @@ const circuitBreakerMiddleware = (req, res, next) => {
   });
 
   // Check state
-  if (!breaker.allowRequest()) {
+  const allowed = breaker.allowRequest();
+  req.breakerState = breaker.state; // Update in case it transitioned to HALF_OPEN
+
+  if (!allowed) {
     res.setHeader('X-Circuit-State', breaker.state);
     return res.status(503).json({
       error: 'Service Unavailable',
