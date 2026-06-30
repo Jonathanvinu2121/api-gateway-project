@@ -42,13 +42,26 @@ export function ClientList() {
                   {c.id}
                 </span>
               </div>
-              <span className="font-mono text-sm tabular-nums text-muted-foreground">
+              <span
+                key={c.requests}
+                className="font-mono text-sm tabular-nums text-muted-foreground animate-count-pulse"
+              >
                 {c.requests.toLocaleString()} reqs
               </span>
             </li>
           ))}
         </ul>
       )}
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes countPulse {
+          0% { transform: scale(1.15); color: rgb(34, 197, 94); text-shadow: 0 0 4px rgba(34, 197, 94, 0.4); }
+          100% { transform: scale(1); color: inherit; }
+        }
+        .animate-count-pulse {
+          animation: countPulse 400ms ease-out forwards;
+          display: inline-block;
+        }
+      `}} />
     </section>
   )
 }

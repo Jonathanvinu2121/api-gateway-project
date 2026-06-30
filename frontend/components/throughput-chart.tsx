@@ -89,6 +89,7 @@ export function ThroughputChart() {
             vectorEffect="non-scaling-stroke"
             strokeLinejoin="round"
             strokeLinecap="round"
+            style={{ transition: "d 300ms ease-in-out" }}
           />
 
           {/* Blocked throughput path */}
@@ -100,6 +101,7 @@ export function ThroughputChart() {
             vectorEffect="non-scaling-stroke"
             strokeLinejoin="round"
             strokeLinecap="round"
+            style={{ transition: "d 300ms ease-in-out" }}
           />
         </svg>
       </div>

@@ -38,7 +38,7 @@ export function LogPanel() {
           logs.map((log) => (
             <div
               key={log.id}
-              className="flex items-center gap-4 py-0.5 tabular-nums hover:bg-white/[0.02] transition-colors"
+              className="flex items-center gap-4 py-0.5 tabular-nums hover:bg-white/[0.02] transition-colors animate-log-flash"
             >
               <span className="w-20 shrink-0 text-muted-foreground">
                 {log.time}
@@ -57,6 +57,15 @@ export function LogPanel() {
           ))
         )}
       </div>
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes logFlash {
+          0% { background-color: rgba(59, 130, 246, 0.25); }
+          100% { background-color: transparent; }
+        }
+        .animate-log-flash {
+          animation: logFlash 500ms ease-out forwards;
+        }
+      `}} />
     </section>
   )
 }

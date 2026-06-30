@@ -62,13 +62,39 @@ export function StatusCards() {
           </div>
           <div className="flex items-center gap-2">
             <span
-              className={`h-2 w-2 rounded-full ${DOT[s.state]}`}
+              key={`dot-${s.label}`}
+              className={`h-2 w-2 rounded-full transition-all duration-300 ${DOT[s.state]} animate-dot-pulse`}
+              style={{ color: s.state === 'alert' ? 'rgb(239, 68, 68)' : s.state === 'warning' ? 'rgb(234, 179, 8)' : 'rgb(34, 197, 94)' }}
               aria-hidden="true"
             />
-            <span className={`text-xs font-semibold uppercase ${TEXT[s.state]}`}>{s.label}</span>
+            <span
+              key={`text-${s.label}`}
+              className={`text-xs font-semibold uppercase transition-all duration-300 ${TEXT[s.state]} animate-text-glow`}
+              style={{ color: s.state === 'alert' ? 'rgb(239, 68, 68)' : s.state === 'warning' ? 'rgb(234, 179, 8)' : 'rgb(34, 197, 94)' }}
+            >
+              {s.label}
+            </span>
           </div>
         </div>
       ))}
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes dotPulse {
+          0% { transform: scale(1); box-shadow: 0 0 0 0 currentColor; }
+          50% { transform: scale(1.6); box-shadow: 0 0 10px 4px currentColor; }
+          100% { transform: scale(1); box-shadow: 0 0 0 0 currentColor; }
+        }
+        .animate-dot-pulse {
+          animation: dotPulse 600ms ease-out forwards;
+        }
+        @keyframes textGlow {
+          0% { opacity: 0.5; }
+          50% { opacity: 1; text-shadow: 0 0 6px currentColor; }
+          100% { opacity: 1; }
+        }
+        .animate-text-glow {
+          animation: textGlow 600ms ease-out forwards;
+        }
+      `}} />
     </section>
   )
 }

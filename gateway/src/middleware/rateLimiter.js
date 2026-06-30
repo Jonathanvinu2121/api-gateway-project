@@ -30,7 +30,7 @@ const rateLimiterMiddleware = (routeConfig) => {
   return async (req, res, next) => {
     req.rateLimitDecision = 'allowed';
     // Exclude healthcheck routes from rate limiting
-    if (req.path === '/health' || req.path === '/health/') {
+    if (req.originalUrl === '/health' || req.originalUrl === '/health/') {
       return next();
     }
 
