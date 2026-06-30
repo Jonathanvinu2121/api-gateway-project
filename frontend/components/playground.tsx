@@ -32,7 +32,7 @@ export function Playground() {
   const [lastResponse, setLastResponse] = useState<ResponseDetails | null>(null)
 
   const adminApiKey = process.env.NEXT_PUBLIC_ADMIN_API_KEY || "admin_demo_secret_key"
-  const gatewayUrl = "http://localhost:4000"
+  const gatewayUrl = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000"
 
   const addLog = (msg: string) => {
     setPlaygroundLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`])

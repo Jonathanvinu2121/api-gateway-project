@@ -25,6 +25,7 @@ services:
       - MONGODB_URI=mongodb://mongodb:27017/api_gateway
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=super-secret-jwt-key
+      - CORS_ORIGIN=http://localhost:3000,http://localhost:3001
       - ADMIN_API_KEY=admin_demo_secret_key
     depends_on:
       - mongodb
