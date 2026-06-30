@@ -84,15 +84,17 @@ Request → JWT verify → Resolve tenant + tier → Rate limit check (Redis, ~1
 
 | Layer | Choice | Why |
 |---|---|---|
-| Gateway runtime | Node.js + Express | Lightweight, huge middleware ecosystem, matches the job-market stack this project targets |
+| Gateway runtime | Node.js 20 + Express | Lightweight, huge middleware ecosystem, matches the job-market stack this project targets |
 | Auth | JWT (jsonwebtoken) + bcrypt | Stateless auth — gateway doesn't need a session store, just verifies signatures |
-| Rate limit store | Redis (Upstash, free tier) | Sub-millisecond key lookups; native `EXPIRE`/TTL semantics; Lua scripting for atomicity |
-| Persistent store | MongoDB (Atlas, free tier) | Flexible schema for heterogeneous request logs; easy free-tier hosting |
+| Rate limit store | Redis (ioredis client) | Sub-millisecond key lookups; native `EXPIRE`/TTL semantics; Lua scripting for atomicity |
+| Persistent store | MongoDB (Mongoose) | Flexible schema for heterogeneous request logs |
 | Real-time stream | Socket.io | Push request/breaker events to dashboard without polling |
-| Frontend | React + Vite + Tailwind + Recharts | Fast dev loop, utility CSS for a dense dashboard UI, Recharts for the live charts |
-| Mock services | Express (x2) | Simulate real upstreams with configurable latency/failure injection |
-| Containerization | Docker + Docker Compose | One-command local spin-up: gateway + services + local Redis + local Mongo |
-| Hosting | Render (gateway/services) + Vercel (frontend) | Both have functional free tiers compatible with this architecture |
+| Frontend | Next.js (App Router) + Tailwind v4 + custom SVG charts | Component structure originated from a v0 design export; charts hand-rolled in SVG rather than a charting library, kept the bundle light for a UI this simple |
+| Mock services | Express (x2) | Simulate real upstreams with configurable latency/failure injection, runtime-adjustable via an admin-key-protected endpoint |
+| Containerization | Docker + Docker Compose | One-command local spin-up: gateway + both mock services + Redis + MongoDB. Frontend runs separately via `npm run dev`, not containerized |
+| Hosting (planned) | Render (gateway/services) + Vercel (frontend) | Both have functional free tiers compatible with this architecture |
+
+Note: the original plan called for Vite + Recharts on the frontend. Partway through the build, a v0-generated design export (Next.js App Router, hand-rolled SVG charts) was adopted instead because it matched the intended minimal visual direction more precisely and didn't need restyling. The architecture diagram and request lifecycle below are otherwise unchanged from the original design.
 
 ---
 
@@ -130,9 +132,9 @@ Both are implemented as **atomic Redis Lua scripts**, keyed by `ratelimit:{tenan
 
 ### 6. Frontend: Dashboard + Playground
 
-**Dashboard tab** — live-updating view of the system: throughput chart (allowed vs blocked), circuit breaker state cards with transition animations, per-tenant quota bars, scrolling color-coded event log, and a latency sparkline for the rate-limit check itself.
+**Dashboard tab** — live-updating view of the system: a throughput chart showing allowed vs blocked requests over a rolling 60-second window (built with hand-rolled SVG, accumulated via `useRef` counters read-and-reset on a 1-second interval to avoid losing or double-counting events between Socket.io messages), circuit breaker status cards per upstream service with color transitions on state change, a live tenant activity list derived from incoming events, and a color-coded scrolling event log.
 
-**Playground tab** — a traffic generator: pick a tenant and route, fire a single request / burst / sustained load / chaos pattern, see the raw response (status, headers, latency), and a dedicated "trip the breaker" button that hammers a route until the mock service's failure rate trips it — so the dashboard's state change can be watched live.
+**Playground tab** — a traffic generator authenticated via quick-register, manual JWT paste, or a seeded demo credential (see [seed.js](#getting-started)): pick a route, fire a single request / configurable burst / sustained load, see the full raw response (status, headers including `X-RateLimit-*`, latency, body), and a dedicated "Trip the Breaker" button that uses an admin-key-protected runtime endpoint to set a mock service's failure rate to 80%, hammers it with requests, and shows each one's real status and the breaker's reported state live in an output log — so the breaker's CLOSED → OPEN transition (and the rate limiter's behavior) can be watched and demonstrated end-to-end, with the Dashboard tab's status cards confirming the same state change visually in real time.
 
 ---
 
@@ -175,13 +177,27 @@ The core interview-defensible point: **a circuit breaker's job isn't to prevent 
 
 If limits were only per-tenant, one expensive route could exhaust a tenant's entire quota and starve every other route they use. Keying by `tenantId:routePrefix` means tenant isolation is real (no noisy-tenant problem) *and* route isolation is real (no noisy-route problem) — both axes matter in a multi-tenant system.
 
-### Why Upstash (Redis REST API) instead of a raw TCP Redis client?
+### Why a local Redis/MongoDB via Docker Compose, rather than managed cloud services?
 
-Some free-tier hosts (and many serverless environments) restrict outbound non-HTTP TCP connections, or make persistent TCP connections from a serverless function awkward (connection-per-invocation overhead). Upstash exposes Redis over a REST API, which sidesteps that entirely and keeps the project deployable on free infrastructure without a "works locally, breaks in prod" gap. The tradeoff — REST has slightly higher per-call latency than raw TCP — is acceptable here and is exactly the kind of cost/latency tradeoff worth being able to articulate.
+The original plan called for Upstash (Redis REST API) and MongoDB Atlas specifically to keep the project deployable on free-tier hosts with potential outbound TCP restrictions. For local development and the verification process documented throughout this README, plain `redis:7-alpine` and `mongo:7` containers in Docker Compose were used instead — simpler to reason about while building and debugging (e.g. `mongosh` direct queries during verification), with no network dependency on an external service while iterating. The README's [Deployment](#deployment) section below still documents the Upstash/Atlas path for an actual public deployment, since that tradeoff (REST API sidesteps TCP restrictions on serverless/free-tier hosts) remains correct advice for that scenario — it just wasn't the path taken for local development and testing.
 
 ### Why log to MongoDB instead of just keeping metrics in memory?
 
 In-memory metrics die on every deploy/restart and don't survive a multi-instance gateway (if this gateway were horizontally scaled, in-memory state wouldn't be shared across instances anyway). Persisting to Mongo means the dashboard's history survives restarts and the `/admin/metrics` aggregation reflects genuine historical data, not just "since the process last started." It's also what makes per-tenant breakdowns and longer-window analytics possible later.
+
+### Why does the gateway need explicit CORS middleware, and how was the gap found?
+
+Every backend route was built and tested via `curl` first — and `curl` does not enforce CORS, since CORS is a *browser* security mechanism, not an HTTP one. This meant the gateway worked perfectly through every command-line test across rate limiting, the circuit breaker, and the logging pipeline, while having a real, undetected bug: the Express app had no CORS middleware at all. Socket.io's connection (configured separately) worked fine, masking the gap further, since the dashboard's live data stream never touched the broken path.
+
+The bug only surfaced once the Playground tab made its first real `fetch()` call from the browser — registration failed with a CORS error, confirmed via the browser's Network tab showing the preflight `OPTIONS` request succeeding but the actual `POST` being blocked. The fix was standard (the `cors` npm package, configured with an explicit allowed-origins list rather than a wildcard, since wildcard origins are incompatible with credentialed requests), but the discovery process is worth being able to explain: **command-line testing alone cannot validate browser-enforced security boundaries.** Any project with both a CLI-testable backend and a browser frontend needs at least one real browser-based request test before being considered verified, not just curl coverage.
+
+### Why does the admin config endpoint use a simple shared secret instead of JWT auth?
+
+The Playground's "Trip the Breaker" demo needs to adjust a mock service's failure-injection rate at runtime, via `POST /admin/configure/:service`. This endpoint *writes* — it can degrade a backend service's behavior — so it needed real auth, but full JWT/tenant auth would be the wrong tool here: this isn't a tenant-scoped action, it's a demo control surface that shouldn't be tied to any particular user's permissions.
+
+The solution is a shared secret (`ADMIN_API_KEY`), checked via an `X-Admin-Key` header on both the gateway's forwarding route and the mock services' own `/configure` endpoints (defense at both layers, not just the gateway). The frontend reads the same value through a `NEXT_PUBLIC_*` environment variable, which means it's visible in browser devtools by design — this is intentional and worth stating plainly rather than treating as an oversight: **this key is a demo-only control, not a production security boundary.** In a real deployment, this endpoint either wouldn't exist publicly at all, or would sit behind real authenticated internal tooling, not a client-visible key.
+
+
 
 ---
 
@@ -234,22 +250,24 @@ In-memory metrics die on every deploy/restart and don't survive a multi-instance
 git clone <your-repo-url>
 cd api-gateway-project
 cp gateway/.env.example gateway/.env
-docker-compose up --build
+docker compose up --build
 ```
 
-This spins up: gateway (`:4000`), users-service (`:5001`), orders-service (`:5002`), local Redis (`:6379`), local MongoDB (`:27017`).
+This spins up: gateway (`:4000`), users-service (`:5001`), orders-service (`:5002`), Redis (`:6379`), MongoDB (`:27017`). Required gateway env vars (see `gateway/.env.example` for the full list with defaults): `PORT`, `USERS_SERVICE_URL`, `ORDERS_SERVICE_URL`, `MONGODB_URI`, `REDIS_URL`, `JWT_SECRET`, `CORS_ORIGIN` (comma-separated allowed frontend origins), `ADMIN_API_KEY` (shared secret for the Playground's runtime failure-rate control — must match the same value used by the frontend and both mock services).
 
-Then seed demo data:
+Then seed demo tenants (one per pricing tier, with working credentials printed to console):
 ```bash
-node seed.js
+node gateway/seed.js
 ```
 
-Frontend:
+Frontend (runs separately, not containerized):
 ```bash
 cd frontend
+cp .env.example .env.local
 npm install
 npm run dev
 ```
+Note: the dev server defaults to port 3000, but will automatically fall back to 3001 (or the next free port) if something else is already using it — check the terminal output for the actual URL. `frontend/.env.local` needs `NEXT_PUBLIC_ADMIN_API_KEY` set to the same value as the gateway's `ADMIN_API_KEY`, and `NEXT_PUBLIC_GATEWAY_URL` (defaults to `http://localhost:4000`).
 
 ### Manual setup (without Docker)
 
@@ -312,7 +330,8 @@ On block: `429 Too Many Requests` + `Retry-After: <seconds>`
 ### Admin
 | Method | Path | Description |
 |---|---|---|
-| GET | `/admin/metrics` | Aggregate throughput, block rate, breaker states |
+| GET | `/admin/metrics` | Aggregate throughput, block rate, breaker states. No auth (read-only, accepted gap for a portfolio project). |
+| POST | `/admin/configure/:service` | Set a mock service's runtime failure-injection rate (0.0–1.0). Requires `X-Admin-Key` header matching `ADMIN_API_KEY`. Used by the Playground's "Trip the Breaker" flow. |
 | GET | `/admin/routes` | List configured routes |
 | POST | `/admin/routes` | Add/update a route (path, upstream, timeout, rate-limit config) |
 
