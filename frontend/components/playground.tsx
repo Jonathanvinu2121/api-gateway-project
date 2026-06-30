@@ -49,7 +49,7 @@ export function Playground() {
       const regRes = await fetch(`${gatewayUrl}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ name: email.split("@")[0] || "Demo Tenant", email, password })
       })
 
       if (!regRes.ok) {
@@ -58,7 +58,7 @@ export function Playground() {
 
       const regData = await regRes.json()
       setToken(regData.token)
-      setAuthStatus(`Registered & Authenticated: Tenant ${regData.tenantId.slice(0, 8)} (${regData.tier})`)
+      setAuthStatus(`Registered & Authenticated: Tenant ${regData.user.tenantId.slice(0, 8)} (${regData.user.tier})`)
       addLog("Tenant registered successfully. JWT Token acquired.")
     } catch (err: any) {
       console.error(err)
@@ -279,10 +279,15 @@ export function Playground() {
               />
             </div>
             
-            <div className="flex items-center justify-between gap-3">
-              <Button type="submit" variant="secondary" className="h-8 text-xs">
-                Quick-Register Tenant
-              </Button>
+            <Button
+              type="submit"
+              disabled={isRunning}
+              className="h-9 w-full bg-primary hover:bg-primary/90 text-foreground text-xs font-semibold"
+            >
+              Register & Get Token
+            </Button>
+            
+            <div className="flex items-center justify-center mt-1">
               <span className="text-[11px] text-muted-foreground">or paste token below:</span>
             </div>
           </form>
